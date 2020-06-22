@@ -1,0 +1,253 @@
+<html>
+<head>
+    <style>
+        body {
+            font-family: sans-serif
+        }
+
+        h3 {
+            background-color: black;
+            color: white;
+            padding: 5px;
+        }
+
+        svg {
+            border-style: solid;
+            border-color: black;
+            border-width: 1px;
+        }
+        
+        .mainView {
+            display: flex;
+        }
+
+    </style>
+    <script src="d3.js"></script>
+</head>
+<body>
+
+     <script> 
+    // All your javascript code will go here 
+    let store = {} 
+
+
+    function loadData() {
+    return Promise.all([
+        d3.csv("data.csv"),
+        d3.json("countries.geo.json"),
+    ]).then(datasets => {
+      console.log(datasets[0])
+        store.routes = datasets[0];
+        store.geoJSON = datasets[1]
+        return store;
+    })
+}
+
+
+    function groupBydonor(data) {
+    //Iterate over each route, producing a dictionary where the keys is are the ailines ids and the values are the information of the airline.
+    let result = data.reduce((result, d) => {
+        let currentData = result[d.donor] || {
+            
+            "Donor_name": d.donor,
+            "Count": Number(d.commitment_amount_usd_constant)
+            
+        }
+        
+        currentData.Count += Number(d.commitment_amount_usd_constant) //TODO: Increment the count (number of routes) of ariline.
+        
+        result[d.donor] = 
+        {
+            "Donor_name": d.donor,
+            "Count":currentData.Count
+        } //TODO: Save the updated information in the dictionary using the airline id as key.
+        
+        return result;
+    }, {})
+
+    //We use this to convert the dictionary produced by the code above, into a list, that will make it easier to create the visualization. 
+    result = Object.keys(result).map(key => result[key])
+    result = result.sort((a,b) => { 
+    return d3.descending(a.Count,b.Count) 
+    }) //TODO: Sort the data in descending order of count.
+
+    return result
+}
+
+function groupByrecipient(data) {
+    //Iterate over each route, producing a dictionary where the keys is are the ailines ids and the values are the information of the airline.
+    let result = data.reduce((result, d) => {
+        let currentData = result[d.recipient] || {
+            
+            "recipient_name": d.recipient,
+            "Count": Number(d.commitment_amount_usd_constant)
+            
+        }
+        
+        currentData.Count += Number(d.commitment_amount_usd_constant) //TODO: Increment the count (number of routes) of ariline.
+        
+        result[d.recipient] = 
+        {
+            "recipient_name": d.recipient,
+            "Count":currentData.Count
+        } //TODO: Save the updated information in the dictionary using the airline id as key.
+
+        return result;
+    }, {})
+
+    //We use this to convert the dictionary produced by the code above, into a list, that will make it easier to create the visualization. 
+    result = Object.keys(result).map(key => result[key])
+    result = result.sort((a,b) => { 
+    return d3.descending(a.Count,b.Count) 
+    }) //TODO: Sort the data in descending order of count.
+
+    return result
+}
+
+function showData() {
+    //Get the routes from our store variable
+    let routes = store.routes
+    // Compute the number of routes per airline.e
+    let donors = groupBydonor(store.routes);
+    let recipient = groupByrecipient(store.routes);
+
+
+    Data_list_donor(store.geoJSON, store.routes)
+    Data_list_recipient(store.geoJSON, store.routes)
+
+
+}
+
+
+function Data_list_donor(mapinfo, data) {
+
+    let dataindex = {}
+
+    // dataindex_donor = {}
+    for (let c of data){
+        let country = c.donor;
+        dataindex[country] = +c.commitment_amount_usd_constant
+    }
+    
+    mapinfo.features = mapinfo.features.map(d => {
+        let country = d.properties.name;
+        let level = dataindex[country]
+        console.log("level", level)
+        d.properties.level = level
+        return d
+    })
+    let maxintensity = d3.max(mapinfo.features, d=> d.properties.level)
+
+    let medianintensity = d3.median(mapinfo.features, d=> d.properties.level)
+
+    let cScale = d3.scaleLinear()
+    .domain([0, medianintensity, maxintensity])
+    .range(["white", "orange", "red"])
+
+  let width = 600;
+  let height = 500;
+  let container = d3.select("#Map")//TODO: select the svg with id Map
+     container
+        .attr("width", width)
+        .attr("height", height)//TODO: set the width and height of the conatiner to be equal the width and height variables.
+  config = {width, height, container}
+
+  // let {width, height} = config;
+  let projection = d3.geoMercator()//TODO: Create a projection of type Mercator.
+  projection.scale(97)
+            .translate([width / 2, height / 2 + 20])
+            
+  store.mapProjection = projection;
+
+
+  let path = d3.geoPath()
+    .projection(projection)//TODO: create a geoPath generator and set its projection to be the projection passed as parameter.
+  
+  container.selectAll("path").data(mapinfo.features)
+      .enter().append("path")
+      .attr("d", d => path(d))//TODO: use the path generator to draw each country)
+      .attr("stroke", "#ccc")
+      .attr("fill", 
+              d => d.properties.level?
+              cScale(d.properties.level):
+              "white"
+        )
+}
+
+function Data_list_recipient(mapinfo, data) {
+
+    let dataindex = {}
+
+    // dataindex_donor = {}
+    for (let c of data){
+        let country = c.recipient;
+        dataindex[country] = +c.commitment_amount_usd_constant
+    }
+    
+
+    mapinfo.features = mapinfo.features.map(d => {
+        let country = d.properties.name;
+        let level = dataindex[country]
+        console.log("level", level)
+        d.properties.level = level
+        return d
+    })
+    let maxintensity = d3.max(mapinfo.features, d=> d.properties.level)
+
+    let medianintensity = d3.median(mapinfo.features, d=> d.properties.level)
+
+    let cScale = d3.scaleLinear()
+    .domain([0, medianintensity, maxintensity])
+    .range(["white", "#9ecae1", "#3182bd"])
+
+  let width = 600;
+  let height = 500;
+  let container = d3.select("#Map2")//TODO: select the svg with id Map
+     container
+        .attr("width", width)
+        .attr("height", height)//TODO: set the width and height of the conatiner to be equal the width and height variables.
+  config = {width, height, container}
+
+  // let {width, height} = config;
+  let projection = d3.geoMercator()//TODO: Create a projection of type Mercator.
+  projection.scale(97)
+            .translate([width / 2, height / 2 + 20])
+            
+  store.mapProjection = projection;
+
+
+  let path = d3.geoPath()
+    .projection(projection)//TODO: create a geoPath generator and set its projection to be the projection passed as parameter.
+  
+  container.selectAll("path").data(mapinfo.features)
+      .enter().append("path")
+      .attr("d", d => path(d))//TODO: use the path generator to draw each country)
+      .attr("stroke", "#ccc")
+      .attr("fill", 
+              d => d.properties.level?
+              cScale(d.properties.level):
+              "white"
+        )
+
+}
+
+
+
+
+loadData().then(showData);
+
+    </script>
+    <div class="mainView">
+
+        <div>
+            <h3>Countries Colored by Donations Amount</h2>
+            <svg id="Map"></svg>
+        </div>
+        <div>
+            <h3>Countries Colored by Recipient Amount</h2>
+            <svg id="Map2"></svg>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,347 @@
+<html>
+	<head>
+		<style>
+        body {
+            font-family: sans-serif
+        }
+
+        h1 {
+            background-color:black;
+            color: white;
+
+
+        }
+
+
+        .mainView {
+          display: flex;
+        }
+
+
+
+
+        .chart .left {
+          color:"red"
+        }
+        .chart .right {
+          color: "green"
+        }
+        .line {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: 2px;
+}
+
+
+    </style>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+		<script src="d3.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/2.4.1/lodash.min.js"></script>
+		<!-- Load color palettes -->
+		<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+		<script>
+_u = _.noConflict(); // lets call ourselves _u
+</script>
+	</head>
+	<body>
+		<h1>Top 10 purposes of disbursements (in terms of total amount of disbursement) and how does their amount compare over time</h1>
+		<div class="mainView">
+			<div id="my_dataviz"></div>
+		</div>
+		<script type="text/javascript">
+    
+    let store ={}
+    let sum =0
+
+
+   function loadData() {
+    
+     let promise=   d3.csv("data.csv")
+  
+    return promise.then(datasets => {
+      store.donations = datasets;
+      for(var i = 0;i
+			<datasets.length;i++){
+        sum+= parseInt(datasets[i].commitment_amount_usd_constant)
+      }
+        return store, sum;
+    })
+     }
+
+    function gettop10(data)
+    {
+        let result= data.reduce(function(result,d){
+        let curr= result[d.coalesced_purpose_code] || {
+            "Pcode":d.coalesced_purpose_code,
+            "Purpose":d.coalesced_purpose_name,
+            "amount":0
+        }
+        curr.amount+=result[d.coalesced_purpose_code]!=undefined ? +d.commitment_amount_usd_constant:0;
+        result[d.coalesced_purpose_code]=curr;
+
+        return result;
+        },{})
+
+  
+        result = Object.keys(result).map(key => result[key])
+
+        result.sort(function(x,y){
+        return d3.descending(x.amount, y.amount)
+        })
+        
+        result=result.slice(0,10);
+  
+        let pcodelist=result.map(function(data)
+        {return data.Pcode
+            
+        })
+   
+
+        let purposelist=result.map(function(data)
+        {return data.Purpose
+            
+        })
+ 
+        //======= purpose and code dictonary
+        let purpodeandcodelist=result.map(function(data)
+        {return {"pcode":data.Pcode,"purpose":data.Purpose}
+            
+        },{})
+
+        let Purposeandcode=purpodeandcodelist.reduce(function(r,data){
+            let curr=r[data.pcode]||{"purpose":data.purpose}
+            r[data.pcode]=curr;
+            return r;
+        },{})
+
+        //------year list---------------
+        let years=  data.map(function(d){
+            return +d.year
+        } )
+        years=d3.set(years).values()
+        years=Array.from(years)
+
+        years=years.sort(function(a,b){
+            return a-b
+        })
+
+ 
+
+
+        listwithyearandpurpose=d3.nest().key(function(d){
+            return d.coalesced_purpose_code;
+        }).key(function(d){
+            return +d.year;
+        }).rollup(function(leaves){
+            return d3.sum(leaves,function(d){
+                    return +d.commitment_amount_usd_constant;
+            })
+        }).object(data);
+
+
+
+        //---------finally getting data as want
+        //do it for a single putpose
+        id=0;
+
+
+
+        var NewData = new Object();
+        for(pcode of pcodelist)
+        {
+            for(year of years)
+            {NewData[id]={
+            "year": +year,
+            "pcode": pcode,
+            "purpose":Purposeandcode[pcode].purpose,
+            "amount": listwithyearandpurpose[pcode][year]!=undefined? +listwithyearandpurpose[pcode][year]:0
+
+            }
+
+            id++;
+            }
+
+        }
+        NewData = Object.keys(NewData).map(key => NewData[key])
+        return [NewData,pcodelist,years,purposelist];
+
+    }
+
+  
+    function showData() {
+       let x = gettop10(store.donations);
+        Top10donation=x[0]
+        Pcodelist=x[1]
+        years=x[2]
+        purposelist=x[3]
+        
+        drawlinegraph(Top10donation,Pcodelist,years,purposelist)
+          } 
+
+
+    
+
+    loadData().then(showData);
+  
+			</script>
+			<script>
+function drawlinegraph(data,Pcodelist,years,purposelist){
+  // set the dimensions and margins of the graph
+  var margin = {top: 20, right: 20, bottom: 30, left: 50},
+      width = 1200 - margin.left - margin.right,
+      height = 500 - margin.top - margin.bottom;
+  
+  // parse the date / time
+
+   let  [min,max]=d3.extent(data,function(d){
+      return (+d.amount!=0)?+d.amount:112866729;
+    })
+
+
+  // set the ranges
+  var x = d3.scaleLinear().range([0, width]);
+  var y = d3.scaleLinear().range([height, 0]);
+  
+  // define the 1st line
+  var valueline = d3.line()
+      .x(function(d) { return x(d.year); })
+      .y(function(d) { return y(d.amount); });
+  
+  // define the 2nd line
+  /*var valueline2 = d3.line()
+      .x(function(d) { return x(d.year); })
+      .y(function(d) { return y(d.amount); });
+   */
+  
+  // append the svg obgect to the body of the page
+  // appends a 'group' element to 'svg'
+  // moves the 'group' element to the top left margin
+  var svg = d3.select("body").append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+      .attr("transform",
+            "translate(" + (margin.left+80) + "," + margin.top + ")");
+  
+
+  
+    // Scale the range of the data
+    x.domain(d3.extent(data, function(d) { return +d.year; }));
+    y.domain([0,max]);
+  
+//light
+  var a="#8dd3c7",
+b="#ffffb3",
+c="#bebada",
+d="#fb8072",
+e="#80b1d3",
+f="#fdb462",
+g="#b3de69",
+h="#fccde5",
+i="#d9d9d9",
+j="#bc80bd";
+
+//high
+var a="#a6cee3",
+b="#1f78b4",
+c="#b2df8a",
+d="#33a02c",
+e="#fb9a99",
+f="#e31a1c",
+g="#fdbf6f",
+h="#ff7f00",
+i="#cab2d6",
+j="#6a3d9a";
+
+
+
+        // Add the valueline1 path.
+         svg.append("path")
+        .data([data.slice(0,40)])
+        .attr("class", "line")
+        .style("stroke", a)
+        .attr("d", valueline);
+  
+        // Add the valueline2 path.
+        svg.append("path")
+        .data([data.slice(41,81)])
+        .attr("class", "line")
+        .style("stroke", b)
+        .attr("d", valueline);
+  
+       // Add the valueline3 path.
+          svg.append("path")
+        .data([data.slice(82,122)])
+        .attr("class", "line")
+        .style("stroke", c)
+        .attr("d", valueline);
+       // Add the valueline4 path.
+        svg.append("path")
+        .data([data.slice(123,163)])
+        .attr("class", "line")
+        .style("stroke", d)
+        .attr("d", valueline);
+
+         // Add the valueline5 path.
+         svg.append("path")
+        .data([data.slice(164,204)])
+        .attr("class", "line")
+        .style("stroke", e)
+        .attr("d", valueline);
+
+        // Add the valueline6 path.
+        svg.append("path")
+        .data([data.slice(205,245)])
+        .attr("class", "line")
+        .style("stroke",f)
+        .attr("d", valueline);
+      
+       // Add the valueline7 path.
+       svg.append("path")
+        .data([data.slice(246,286)])
+        .attr("class", "line")
+        .style("stroke", g)
+        .attr("d", valueline);
+        // Add the valueline8 path.
+        svg.append("path")
+        .data([data.slice(287,327)])
+        .attr("class", "line")
+        .style("stroke", h)
+        .attr("d", valueline);
+       
+        // Add the valueline9 path.
+        svg.append("path")
+        .data([data.slice(328,368)])
+        .attr("class", "line")
+        .style("stroke", i)
+        .attr("d", valueline);
+        
+        // Add the valueline10 path.
+        svg.append("path")
+        .data([data.slice(369,409)])
+        .attr("class", "line")
+        .style("stroke", j)
+        .attr("d", valueline);
+       
+       
+
+    // Add the X Axis
+    svg.append("g")
+      .style("font-size", 12)
+      .attr("transform", "translate(0," + height + ")")
+      .call(d3.axisBottom(x).tickSize(0))
+      
+  
+    // Add the Y Axis
+    svg.append("g")
+      .style("font-size", 12)
+      .call(d3.axisLeft(y).tickSize(0))
+      
+      
+  
+
+}
+  </script>
+		</body>
+	</html>
+

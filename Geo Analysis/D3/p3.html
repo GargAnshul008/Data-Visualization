@@ -1,0 +1,189 @@
+<html>
+<head>
+
+    <style>
+        body {
+            font-family: sans-serif
+        }
+        h3 {
+            background-color: black;
+            color: white;
+            padding: 5px;
+        }
+        .mainView {
+            display: flex;
+        }
+        .m-axis line{
+            stroke: black;
+        }
+    </style>
+    <script src="d3.js"></script>
+</head>
+<body>
+    <h3>Top 5 most frequent purposes of disbursements distribute geographically in terms of  countries that receive donations</h3>
+    <div class="mainView">
+    </div>
+</body>
+<script>
+    let store = {}
+    //read data from the file
+    function loadData() {
+        return Promise.all([
+            d3.csv("data.csv")
+        ]).then(datasets => {
+            store.aid_data = datasets[0];
+            return store;
+        })
+    }
+    function groupByPurpose(data) {
+        //console.log(data)
+        let purpose = {};
+        let result = data.reduce((result, d) => {
+            let recipientData = result[d.recipient] || {
+                "Country": d.recipient
+            }
+            let purposeCode = d.coalesced_purpose_code;
+            let currPurpose = purpose[purposeCode] || {
+                "Code":purposeCode,
+                "Name":d.coalesced_purpose_name,
+                "Count":0
+            }
+            currPurpose.Count += 1;
+            purpose[purposeCode] = currPurpose;
+            let prevAmount = Number(recipientData[purposeCode] || 0) 
+            recipientData[purposeCode] = prevAmount + Number(d.commitment_amount_usd_constant);
+            result[d.recipient] = recipientData;
+            return result;
+        }, {})
+        let purposeArr = Object.keys(purpose).map(key => purpose[key])
+        purposeArr = purposeArr.sort((a,b) => {
+            return d3.descending(a.Count,b.Count);
+        })
+        purposeArr = purposeArr.slice(0,5)
+        let updated = [];
+        let countries = [];
+        Object.keys(result).forEach(key => {
+            var country = result[key];
+            countries.push(country.Country);
+            purposeArr.forEach(p => {
+                updated.push({
+                    "Country":country.Country,
+                    "Code": p.Code,
+                    "Name": p.Name,
+                    "Amount": Number(country[p.Code]) || 0
+                })
+            })
+        });
+        //console.log("updated: ", updated);
+        return {data: updated, countries: countries, purpose: purposeArr}
+    }
+
+    function getChartConfig() {
+        let width = 1200;
+        let height = 500;
+        let margin = {
+            top: 10,
+            bottom: 100,
+            left: 50,
+            right: 10
+        }
+        let bodyHeight = height - margin.top - margin.bottom;
+        let bodyWidth = width - margin.left - margin.right;
+        let container = d3.select(".mainView")
+                        .append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+        return { width, height, margin, bodyHeight, bodyWidth, container };
+    }
+
+    function getChartScales(chartData, config) {
+        let { bodyWidth, bodyHeight } = config;
+        let { data, countries, purpose } = chartData;
+        let maximumReceived = d3.max(data, (d) => {
+            return d.Amount;
+        })
+        let yScale= d3.scalePoint()
+            //Set the range to go from 0 to the width of the body
+            .range([0,bodyHeight])
+            // .rangePoints([0,bodyWidth])
+            .domain(purpose.map(d => d.Code))
+            .padding(3)
+            // .nice();
+
+        let xScale = d3.scalePoint() //d3.scaleBand()
+            .range([0, bodyWidth])
+            .domain(countries)
+            .padding(1)
+        
+        let rScale = d3.scaleLinear()
+                .domain([0,maximumReceived])
+                .range([3,19])
+        
+        let cScale = d3.scaleOrdinal()
+                        .domain(purpose.map(d => d.Code))
+                        .range(d3.schemeCategory10)
+            
+        return { xScale, yScale, rScale, cScale }
+    }
+
+    function drawAxesAidsChart(chartData, scales, config){
+        let {xScale, yScale } = scales
+        let {container, margin, height, bodyHeight} = config;
+        let { data, countries, purpose } = chartData;
+        let axisX = d3.axisBottom(xScale)
+        container.append("g")
+            .call(axisX)
+            .style("transform", 
+                "translate(0px"+","+bodyHeight+"px)"
+            )
+            .selectAll("text")	
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+        let axisY = d3.axisLeft(yScale)
+        container.append("g")
+            .call(axisY)
+
+        countries.forEach(country => {
+            container
+                .append("line")
+                    .style("stroke", "#777")
+                    .style("stroke-dasharray", ("3, 3"))
+                    .attr("y1", bodyHeight)
+                    .attr("y2", 0)
+                    .attr("x1", xScale(country))
+                    .attr("x2", xScale(country))
+        })
+    }
+    function drawCircles(chartData, scales, config){
+        let { data, countries, purpose } = chartData; 
+        let { bodyWidth, bodyHeight, container } = config;
+        let { xScale, yScale, rScale, cScale } = scales;
+        var circle = container.selectAll("circle")
+            .data(data);
+
+        var circleEnter = circle
+                        .enter()
+                        .append("circle")
+                        .attr("cx", (d) => xScale(d.Country))
+                        .attr("cy", (d) => yScale(d.Code))
+                        .attr("r", (d) => rScale(d.Amount))
+                        .attr("fill", (d) => cScale(d.Code))    
+    }
+    
+    function showData() {
+        let aid_data = store.aid_data;
+        let data = groupByPurpose(aid_data);
+        let config = getChartConfig();
+        let scales = getChartScales(data, config);
+        drawAxesAidsChart(data, scales, config);
+        drawCircles(data, scales, config);
+    }
+    loadData().then(showData);
+</script>
+</html>

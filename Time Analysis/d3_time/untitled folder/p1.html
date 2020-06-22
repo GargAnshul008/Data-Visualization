@@ -1,0 +1,310 @@
+<html>
+<head>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color:rgb(252, 252, 252);
+        }
+
+        h4 {
+            background-color: black;
+            color:white;
+            padding: 5px;
+            
+        }
+
+        .mainView {
+            display: flex;
+            
+        }
+
+    </style>
+    <script src="d3.js"></script>
+</head>
+
+<body>
+
+     <script> 
+    // All your javascript code will go here 
+    let store = {} 
+
+
+    function loadData() {
+    return Promise.all([
+        d3.csv("data.csv"),
+        
+    ]).then(datasets => {
+      console.log(datasets[0])
+        store.routes = datasets[0];
+        return store;
+    })
+}
+
+
+
+    function groupBydonor(data) {
+    //Iterate over each route, producing a dictionary where the keys is are the ailines ids and the values are the information of the Aid.
+    let result = data.reduce((result, d) => {
+        let currentData = result[d.donor] || {
+            
+            "Donor_name": d.donor,
+            "Amount": Number(d.commitment_amount_usd_constant)
+            
+        }
+        
+        currentData.Amount += Number(d.commitment_amount_usd_constant) //TODO: Increment the Amount (number of routes) of ariline.
+        
+        result[d.donor] = 
+        {
+            "Donor_name": d.donor,
+            "Amount":currentData.Amount
+        } //TODO: Save the updated information in the dictionary using the Aid id as key.
+        
+        return result;
+    }, {})
+
+    //We use this to convert the dictionary produced by the code above, into a list, that will make it easier to create the visualization. 
+    result = Object.keys(result).map(key => result[key])
+    result = result.sort((a,b) => { 
+    return d3.ascending(a.Donor_name,b.Donor_name);
+    }) //TODO: Sort the data in descending order of Amount.
+
+    return result
+}
+
+function groupByrecipient(data) {
+    //Iterate over each route, producing a dictionary where the keys is are the ailines ids and the values are the information of the Aid.
+    let result = data.reduce((result, d) => {
+        let currentData = result[d.recipient] || {
+            
+            "recipient_name": d.recipient,
+            "Amount": Number(d.commitment_amount_usd_constant)
+            
+        }
+        
+        currentData.Amount += Number(d.commitment_amount_usd_constant) //TODO: Increment the Amount (number of routes) of ariline.
+        
+        result[d.recipient] = 
+        {
+            "recipient_name": d.recipient,
+            "Amount":currentData.Amount
+        } //TODO: Save the updated information in the dictionary using the Aid id as key.
+
+        return result;
+    }, {})
+
+    //We use this to convert the dictionary produced by the code above, into a list, that will make it easier to create the visualization. 
+    result = Object.keys(result).map(key => result[key])
+    result = result.sort((a,b) => { 
+    return d3.ascending(a.recipient_name,b.recipient_name) 
+    }) //TODO: Sort the data in descending order of Amount.
+
+    return result
+}
+
+function showData() {
+    //Get the routes from our store variable
+    let routes = store.routes
+    // Compute the number of routes per Aid.e
+    
+   
+    let donors = groupBydonor(store.routes);
+    let recipient = groupByrecipient(store.routes);
+    console.log("donors", donors)
+    console.log("recipient", recipient)
+    drawChartDonor(donors)
+    drawChartRecipient(recipient)
+    console.log("store.routes", store.routes)
+}
+
+function getAidsChartConfigDonor() {
+    let width = 600;
+    let height = 610;
+    let margin = {
+        top: 10,
+        bottom: 50,
+        left: 130,
+        right: 10
+    }
+    //The body is the area that will be occupied by the bars.
+    let bodyHeight = height - margin.top - margin.bottom
+    let bodyWidth = width - margin.left - margin.right//TODO: Compute the width of the body by subtracting the left and right margins from the width.
+
+    //The container is the SVG where we will draw the chart. In our HTML is the svg tag with the id AidsChart 
+    let container = d3.select('#Chart')//TODO: use d3.select to select the element with id AidsChart 
+    container
+        .attr("width", width)
+        .attr("height", height)
+       //TODO: Set the height of the container
+
+    return { width, height, margin, bodyHeight, bodyWidth, container }
+}
+
+function getAidsChartConfigRecipient() {
+    let width = 650;
+    let height = 610;
+    let margin = {
+        top: 10,
+        bottom: 50,
+        left: 130,
+        right: 10
+    }
+    //The body is the area that will be occupied by the bars.
+    let bodyHeight = height - margin.top - margin.bottom
+    let bodyWidth = width - margin.left - margin.right//TODO: Compute the width of the body by subtracting the left and right margins from the width.
+
+    //The container is the SVG where we will draw the chart. In our HTML is the svg tag with the id AidsChart 
+    let container = d3.select('#Chart2')//TODO: use d3.select to select the element with id AidsChart 
+    container
+        .attr("width", width)
+        .attr("height", height)
+       //TODO: Set the height of the container
+
+    return { width, height, margin, bodyHeight, bodyWidth, container }
+}
+
+function drawChartDonor(Aids) {
+    let config = getAidsChartConfigDonor();
+    let scales = getAidsChartScalesDonor(Aids, config);
+    drawBarsAidsChart_donor(Aids, scales, config);
+    drawAxesAidsChart_donor(Aids, scales, config);
+}
+
+function drawChartRecipient(Aids) {
+    let config = getAidsChartConfigRecipient();
+    let scales = getAidsChartScales_recipient(Aids, config);
+    drawBarsAidsChartRecipient(Aids, scales, config);
+    drawAxesAidsChartRecipient(Aids, scales, config);
+}
+
+
+function getAidsChartScalesDonor(Aids, config) {
+    let { bodyWidth, bodyHeight } = config;
+    let maximunAmount = d3.max( Aids, (Aids) => Aids.Amount);//TODO: Use d3.max to get the highest Amount value we have on the Aids list. 
+
+    let xScale = d3.scaleLinear()
+       .range([0,bodyWidth])
+       .domain([0, maximunAmount]) //TODO: Set the range to go from 0 to the width of the body
+        //TODO: Set the domain to go from 0 to the maximun value fount for the field 'Amount'
+
+    let yScale = d3.scaleBand()
+        .range([0, bodyHeight])
+        .domain(Aids.map(a => a.Donor_name)) //The domain is the list of ailines names
+        .padding(0.2)
+        
+    return { xScale, yScale }
+}
+
+function getAidsChartScales_recipient(Aids, config) {
+    let { bodyWidth, bodyHeight } = config;
+    let maximunAmount = d3.max( Aids, (Aids) => Aids.Amount);//TODO: Use d3.max to get the highest Amount value we have on the Aids list. 
+
+    let xScale = d3.scaleLinear()
+       .range([0,bodyWidth])
+       .domain([0, maximunAmount]) //TODO: Set the range to go from 0 to the width of the body
+        //TODO: Set the domain to go from 0 to the maximun value fount for the field 'Amount'
+
+    let yScale = d3.scaleBand()
+        .range([0, bodyHeight])
+        .domain(Aids.map(a => a.recipient_name)) //The domain is the list of ailines names
+        .padding(0.2)
+        
+    return { xScale, yScale }
+}
+
+function drawBarsAidsChart_donor(Aids, scales, config) {
+  let {margin, container} = config; // this is equivalent to 'let margin = config.margin; let container = config.container'
+  let {xScale, yScale} = scales
+  let body = container.append("g")
+      .style("transform", 
+        `translate(${margin.left}px,${margin.top}px)`
+      )
+
+  let bars = body.selectAll(".bar").data(Aids)
+      //TODO: Use the .data method to bind the Aids to the bars (elements with class bar)
+
+  //Adding a rect tag for each Aid
+  bars.enter().append("rect")
+      .attr("height", yScale.bandwidth())
+      .attr("y", (d) => yScale(d.Donor_name))
+      .attr("width", (d) => xScale(d.Amount))//TODO: set the width of the bar to be proportional to the Aid Amount using the xScale
+      .attr("fill", "red")
+}
+
+function drawBarsAidsChartRecipient(Aids, scales, config) {
+  let {margin, container} = config; // this is equivalent to 'let margin = config.margin; let container = config.container'
+  let {xScale, yScale} = scales
+  let body = container.append("g")
+      .style("transform", 
+        `translate(${margin.left}px,${margin.top}px)`
+      )
+
+  let bars = body.selectAll(".bar").data(Aids)
+      //TODO: Use the .data method to bind the Aids to the bars (elements with class bar)
+
+  //Adding a rect tag for each Aid
+  bars.enter().append("rect")
+      .attr("height", yScale.bandwidth())
+      .attr("y", (d) => yScale(d.recipient_name))
+      .attr("width", (d) => xScale(d.Amount))//TODO: set the width of the bar to be proportional to the Aid Amount using the xScale
+      .attr("fill", "#2a5599")
+}
+
+function drawAxesAidsChart_donor(Aids, scales, config){
+  let {xScale, yScale} = scales
+  let {container, margin, height} = config;
+  let axisX = d3.axisBottom(xScale)
+                .ticks(5)
+
+  container.append("g")
+    .style("transform", 
+        `translate(${margin.left}px,${height - margin.bottom}px)`
+    )
+    .call(axisX)
+
+  let axisY = d3.axisLeft(yScale)//TODO: Create an axis on the left for the Y scale
+     //TODO: Append a g tag to the container, translate it based on the margins and call the axisY axis to draw the left axis.
+    container.append("g") 
+    .style("transform", 
+        `translate(${margin.left}px,${margin.top}px)`
+    )
+    .call(axisY)
+}
+
+function drawAxesAidsChartRecipient(Aids, scales, config){
+  let {xScale, yScale} = scales
+  let {container, margin, height} = config;
+  let axisX = d3.axisBottom(xScale)
+                .ticks(5)
+
+  container.append("g")
+    .style("transform", 
+        `translate(${margin.left}px,${height - margin.bottom}px)`
+    )
+    .call(axisX)
+
+  let axisY = d3.axisLeft(yScale)//TODO: Create an axis on the left for the Y scale
+     //TODO: Append a g tag to the container, translate it based on the margins and call the axisY axis to draw the left axis.
+    container.append("g") 
+    .style("transform", 
+        `translate(${margin.left}px,${margin.top}px)`
+    )
+    .call(axisY)
+}
+
+loadData().then(showData);
+
+    </script>
+    <div class="mainView">
+        <div>
+            <h4>Countries sorted by amount donated</h4>
+            <svg id="Chart"></svg>
+        </div>
+        <div>
+            <h4>Countries sorted by amount received</h4>
+            <svg id="Chart2"></svg>
+        </div>
+       
+    </div>
+</body>
+</html>

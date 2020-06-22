@@ -1,0 +1,1813 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+        .line {
+          fill:none;
+          stroke: blue;
+         }
+/*         #g {
+                  flex-direction : column;
+              }*/
+        body {
+            font-family: Helvetica, Arial, sans-serif
+        }
+
+        h1 {
+            background-color: #2a5599;
+            color: white;
+            padding: 5px;
+        }
+
+        svg {
+            border-style: solid;
+            border-color: black;
+            border-width: 1px;
+        }
+
+        body {
+            font-family: sans-serif
+        }
+        h3 {
+            background-color: black;
+            color: white;
+            padding: 5px;
+        }
+/*        .mainView {
+            display: flex;
+        }*/
+    
+  </style>
+</head>
+<body>
+  <h1>MINI PROJECT 3</h1>
+  <h2>Vizualization 1: Relationship Between Countries According to the Amount Donated/Received </h2>
+  <div id="body1">
+    </div>
+
+   <div id = "legend1">   
+
+    </div>
+
+         <h2>Vizualization 3: Relationship Between Countries based on Donations Related to TOP Frequent Purpose</h2>
+  <div id="body31">
+    </div>
+    <div id = "legend3">    </div>
+
+    <h1> (EXTRAS) Relationships between countries based on single purposes alone</h1>
+  <h2>Vizualization 3: Relationship Between Countries for Air Transport Purpose</h2>
+  <div id="body21">
+    </div>
+
+    <h2>Vizualization 3: Relationship Between Countries for Industrial Development</h2>
+  <div id="body22">
+    </div>
+
+      <h2>Vizualization 3: Relationship Between Countries for Power generation/non-renewable sources</h2>
+  <div id="body23">
+    </div>
+      <h2>Vizualization 3: Relationship Between Countries for Rail Transport</h2>
+  <div id="body24">
+    </div>
+      <h2>Vizualization 3: Relationship Between Countries for Rescheduling and refinancing</h2>
+  <div id="body25">
+    </div>
+
+    	
+
+
+</body>
+
+<script src = "d3.js"></script>
+
+ <script src="d3-legend.min.js"></script>
+<script>
+let store = {}
+
+matrix = []
+m1 = []
+m2=[]
+m3=[]
+m4=[]
+m5=[]
+
+function loadData() {
+        return Promise.all([
+            d3.csv("aiddata.csv")
+        ]).then(datasets => {
+            store.aid_data = datasets[0];
+            return store;
+        })
+  }
+
+
+  //////////////////////////////////////viz 1////////////////////////////////////////////////////////////////////////////////////////////
+
+
+function groupByPurpose(data) {
+     
+        let purpose = {};
+
+        let result = data.reduce((result, d) => {
+            let recipientData = result[d.donor] || {
+                "donor": d.donor
+            }
+            let receiver = d.recipient;
+            let currPurpose = purpose[receiver] || {
+                "recipient":receiver,
+
+                "Count":0
+            }
+ 
+            currPurpose.Count += 1;
+            purpose[receiver] = currPurpose;
+            let prevAmount = Number(recipientData[receiver] || 0) 
+            recipientData[receiver] = prevAmount + Number(d.commitment_amount_usd_constant); 
+            result[d.donor] = recipientData;
+            return result;
+        }, {})
+
+        let purposeArr = Object.keys(purpose).map(key => purpose[key])
+ 
+        purposeArr = purposeArr.sort((a,b) => {
+            return d3.ascending(a.recipient,b.recipient);
+        })
+        let updated = [];
+        let countries = [];
+       
+        Object.keys(result).forEach(key => {
+            var donor = result[key];
+            countries.push(donor.donor);
+
+
+            purposeArr.forEach(p => {
+                updated.push({
+                    "donor":donor.donor,
+                    "recipient": p.recipient,
+                    "Amount": Number(donor[p.recipient]) || 0
+                })
+            })
+
+            purposeArr.forEach(p => {
+                matrix.push({
+                    "donor":donor.donor,
+                    "recipient": p.recipient,
+                    "count":0
+                })
+            })
+
+        });
+
+
+
+        console.log("updated matrix", matrix)
+        return {data: updated, countries: countries, purpose: purposeArr}
+    }
+
+   
+
+    function getChartConfig() {
+        let width = 1200;
+        let height = 1000;
+        let margin = {
+            top: 10,
+            bottom: 100,
+            left: 105,
+            right: 10
+        }
+        let bodyHeight = height - margin.top - margin.bottom;
+        let bodyWidth = width - margin.left - margin.right;
+        let container = d3.select("#body1")
+                        .append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+        return { width, height, margin, bodyHeight, bodyWidth, container };
+    }
+
+    function getChartScales(chartData, config) {
+        let { bodyWidth, bodyHeight } = config;
+        let { data, countries, purpose } = chartData;
+        let maximumReceived = d3.max(data, (d) => {
+            return d.Amount;
+        })
+       
+        countries = countries.sort((a,b) => {
+            return d3.descending(a,b);
+        })
+
+        let yScale= d3.scalePoint()
+            .range([0,bodyHeight])
+            .domain(countries)
+            .padding(4)
+            
+
+        let xScale = d3.scalePoint() 
+            .range([0, bodyWidth])
+            .domain(purpose.map(d => d.recipient))
+            .padding(4)
+
+    let rScale = d3.scaleLinear()
+                .domain([0,maximumReceived])
+                .range([0.1,50.5])
+        
+        let cScale = d3.scaleOrdinal()
+            .domain([0,maximumReceived])
+                .range([3,19])
+
+        return { xScale, yScale, rScale, cScale }
+    }
+
+    function drawAxesAidsChart(chartData, scales, config){
+        let {xScale, yScale } = scales
+        let {container, margin, height, bodyHeight} = config;
+        let { data, countries, purpose } = chartData;
+        let axisX = d3.axisBottom(xScale)
+        container.append("g")
+            .call(axisX)
+            .style("transform", 
+                "translate(0px"+","+bodyHeight+"px)"
+            )
+            .selectAll("text")  
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+        let axisY = d3.axisLeft(yScale)
+        container.append("g")
+            .call(axisY)
+
+        // countries.forEach(donor => {
+        //     container
+        //         .append("line")
+        //             .style("stroke", "#777")
+        //             .style("stroke-dasharray", ("3, 3"))
+        //             .attr("y1", bodyHeight)
+        //             .attr("y2", 0)
+        //             .attr("x1", xScale(donor))
+        //             .attr("x2", xScale(donor))
+        // })
+    }
+    function drawCircles(chartData, scales, config){
+        let { data, countries, purpose } = chartData; 
+        let { bodyWidth, bodyHeight, container } = config;
+        let { xScale, yScale, rScale, cScale } = scales;
+        var circle = container.selectAll("circle")
+            .data(data);
+
+        var circleEnter = circle
+                        .enter()
+                        .append("circle")
+                        .attr("cx", (d) => xScale(d.recipient))
+                        .attr("cy", (d) => yScale(d.donor))
+                        .attr("r", (d) => rScale(d.Amount))
+                        .attr("fill", "#4e79a7")    
+
+  //       var linearSize = d3.scaleLinear()
+  //       	.domain([0, 10])
+  //       	.range([10, 30]);
+
+		// let margin = {
+  //           top: 10,
+  //           bottom: 100,
+  //           left: 105,
+  //           right: 10
+  //       }
+
+		//   let container1 = d3.select("#legend1")
+  //                       .append("svg")
+  //                       .attr("width", 400)
+  //                       .attr("height", 200)
+  //                       .attr("id", "Chart")
+  //                       .append("g")
+  //                       .attr("transform", "translate("+[margin.left,margin.top]+")")
+
+		// container1.append("g")
+		//   .attr("class", "legendSize")
+		//   .attr("transform", "translate(20, 40)");
+
+		// var legendSize = d3.legendSize()
+		//   .scale(linearSize)
+		//   .shape('circle')
+		//   .labels("11", "123", "132", "1234", "2132")
+		//   .shapePadding(15)
+		//   .labelOffset(20)
+		//   .orient('horizontal');
+
+		//   // .attr('fill', '#4e79a7');
+
+		// container1.select(".legendSize")
+		//   .call(legendSize);
+		//   // .attr('fill', '#4e79a7');
+
+    }
+
+
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////VISUALIZATION 21/////////////////////////////////////////////////////////////////////
+
+function groupByPurpose_21(data) {
+
+        p1=[]
+        m1 = p1
+
+        for (var i = data.length - 1; i >= 0; i--) {
+          if (data[i]["coalesced_purpose_name"] == "Air transport" ) {
+              p1.push({
+                    "Country": data[i]["donor"],
+                    "Year": data[i]["recipient"],
+                    "coalesced_purpose_name": data[i]["coalesced_purpose_name"]
+                })
+              }
+      
+        }
+
+
+
+
+
+        console.log("p1", p1)
+        // console.log("p2", p2)
+
+        let purpose = {};
+
+        let result = data.reduce((result, d) => {
+            let recipientData = result[d.donor] || {
+                "donor": d.donor
+            }
+            let receiver = d.recipient;
+            let currPurpose = purpose[receiver] || {
+                "recipient":receiver,
+
+                "Count":0
+            }
+ 
+            currPurpose.Count += 1;
+            purpose[receiver] = currPurpose;
+            let prevAmount = Number(recipientData[receiver] || 0) 
+            recipientData[receiver] = prevAmount + Number(d.commitment_amount_usd_constant);
+            result[d.donor] = recipientData;
+            return result;
+        }, {})
+
+        let purposeArr = Object.keys(purpose).map(key => purpose[key])
+ 
+        purposeArr = purposeArr.sort((a,b) => {
+            return d3.ascending(a.recipient,b.recipient);
+        })
+        let updated = [];
+        let countries = [];
+       
+        Object.keys(result).forEach(key => {
+            var donor = result[key];
+            countries.push(donor.donor);
+            purposeArr.forEach(p => {
+                updated.push({
+                    "donor":donor.donor,
+                    "recipient": p.recipient,
+                    "Amount": Number(donor[p.recipient]) || 0
+                })
+            })
+        });
+
+        console.log("data", updated)
+
+        return {data: updated, countries: countries, purpose: purposeArr}
+    }
+
+   
+
+    function getChartConfig_21() {
+        let width = 1200;
+        let height = 1000;
+        let margin = {
+            top: 10,
+            bottom: 100,
+            left: 105,
+            right: 10
+        }
+        let bodyHeight = height - margin.top - margin.bottom;
+        let bodyWidth = width - margin.left - margin.right;
+        let container = d3.select("#body21")
+                        .append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+        return { width, height, margin, bodyHeight, bodyWidth, container };
+    }
+
+    function getChartScales_21(chartData, config) {
+        let { bodyWidth, bodyHeight } = config;
+        let { data, countries, purpose } = chartData;
+        let maximumReceived = d3.max(data, (d) => {
+            return d.Amount;
+        })
+       
+        countries = countries.sort((a,b) => {
+            return d3.descending(a,b);
+        })
+
+        let yScale= d3.scalePoint()
+            .range([0,bodyHeight])
+            .domain(countries)
+            .padding(4)
+            
+
+        let xScale = d3.scalePoint() 
+            .range([0, bodyWidth])
+            .domain(purpose.map(d => d.recipient))
+            .padding(4)
+
+    let rScale = d3.scaleLinear()
+                .domain([0,maximumReceived])
+                .range([3,50])
+        
+        let cScale = d3.scaleOrdinal()
+            .domain([0,maximumReceived])
+                .range([3,19])
+
+        return { xScale, yScale, rScale, cScale }
+    }
+
+    function drawAxesAidsChart_21(chartData, scales, config){
+        let {xScale, yScale } = scales
+        let {container, margin, height, bodyHeight} = config;
+        let { data, countries, purpose } = chartData;
+        let axisX = d3.axisBottom(xScale)
+        container.append("g")
+            .call(axisX)
+            .style("transform", 
+                "translate(0px"+","+bodyHeight+"px)"
+            )
+            .selectAll("text")  
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+        let axisY = d3.axisLeft(yScale)
+        container.append("g")
+            .call(axisY)
+
+    }
+    function drawCircles_21(chartData, scales, config){
+        let { data, countries, purpose } = chartData; 
+        let { bodyWidth, bodyHeight, container } = config;
+        let { xScale, yScale, rScale, cScale } = scales;
+        
+    
+ //        m = [ {Country: "Brazil", Year: "Brazil"},
+ // {Country: "Brazil", Year: "United States"},
+ // {Country: "Brazil", Year: "India"},
+ // {Country: "Brazil", Year: "Chile"}]
+
+
+        container.selectAll()
+                .data(p1, function(d) {return d.Year+':'+d.Country;})
+                .enter()
+                .append("rect")
+                .attr("x", function(d) { return xScale(d.Year) })
+                .attr("y", function(d) { return yScale(d.Country) })
+                .attr("width", 20 )
+                .attr("height", 14 )
+                .style("fill", "#253494");
+
+
+       // function filler(purpose) {
+       //  if (purpose == "Air transport") {
+       //      return "blue"
+       //  }
+       //  else if (purpose == "Industrial development") {
+       //      return "grey"
+       //  }
+
+       // }
+
+       //  container.selectAll()
+       //          .data(p2, function(d) {return d.Year+':'+d.Country;})
+       //          .enter()
+       //          .append("rect")
+       //          .attr("x", function(d) { return xScale(d.Year) })
+       //          .attr("y", function(d) { return yScale(d.Country) })
+       //          .attr("width", 20 )
+       //          .attr("height", 14 )
+       //          .style("fill", function (d){ return filler(d.coalesced_purpose_name) });
+
+    }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////22//////////////////////////////////////////////////////
+function groupByPurpose_22(data) {
+
+        p1=[]
+        m2 = p1
+
+        for (var i = data.length - 1; i >= 0; i--) {
+          if (data[i]["coalesced_purpose_name"] == "Industrial development" ) {
+              p1.push({
+                    "Country": data[i]["donor"],
+                    "Year": data[i]["recipient"],
+                    "coalesced_purpose_name": data[i]["coalesced_purpose_name"]
+                })
+              }
+      
+        }
+
+
+
+
+
+        // console.log("p1", p1)
+        // console.log("p2", p2)
+
+        let purpose = {};
+
+        let result = data.reduce((result, d) => {
+            let recipientData = result[d.donor] || {
+                "donor": d.donor
+            }
+            let receiver = d.recipient;
+            let currPurpose = purpose[receiver] || {
+                "recipient":receiver,
+
+                "Count":0
+            }
+ 
+            currPurpose.Count += 1;
+            purpose[receiver] = currPurpose;
+            let prevAmount = Number(recipientData[receiver] || 0) 
+            recipientData[receiver] = prevAmount + Number(d.commitment_amount_usd_constant);
+            result[d.donor] = recipientData;
+            return result;
+        }, {})
+
+        let purposeArr = Object.keys(purpose).map(key => purpose[key])
+ 
+        purposeArr = purposeArr.sort((a,b) => {
+            return d3.ascending(a.recipient,b.recipient);
+        })
+        let updated = [];
+        let countries = [];
+       
+        Object.keys(result).forEach(key => {
+            var donor = result[key];
+            countries.push(donor.donor);
+            purposeArr.forEach(p => {
+                updated.push({
+                    "donor":donor.donor,
+                    "recipient": p.recipient,
+                    "Amount": Number(donor[p.recipient]) || 0
+                })
+            })
+        });
+
+        console.log("data", updated)
+
+        return {data: updated, countries: countries, purpose: purposeArr}
+    }
+
+   
+
+    function getChartConfig_22() {
+        let width = 1200;
+        let height = 1000;
+        let margin = {
+            top: 10,
+            bottom: 100,
+            left: 105,
+            right: 10
+        }
+        let bodyHeight = height - margin.top - margin.bottom;
+        let bodyWidth = width - margin.left - margin.right;
+        let container = d3.select("#body22")
+                        .append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+        return { width, height, margin, bodyHeight, bodyWidth, container };
+    }
+
+    function getChartScales_22(chartData, config) {
+        let { bodyWidth, bodyHeight } = config;
+        let { data, countries, purpose } = chartData;
+        let maximumReceived = d3.max(data, (d) => {
+            return d.Amount;
+        })
+       
+        countries = countries.sort((a,b) => {
+            return d3.descending(a,b);
+        })
+
+        let yScale= d3.scalePoint()
+            .range([0,bodyHeight])
+            .domain(countries)
+            .padding(4)
+            
+
+        let xScale = d3.scalePoint() 
+            .range([0, bodyWidth])
+            .domain(purpose.map(d => d.recipient))
+            .padding(4)
+
+    let rScale = d3.scaleLinear()
+                .domain([0,maximumReceived])
+                .range([3,50])
+        
+        let cScale = d3.scaleOrdinal()
+            .domain([0,maximumReceived])
+                .range([3,19])
+
+        return { xScale, yScale, rScale, cScale }
+    }
+
+    function drawAxesAidsChart_22(chartData, scales, config){
+        let {xScale, yScale } = scales
+        let {container, margin, height, bodyHeight} = config;
+        let { data, countries, purpose } = chartData;
+        let axisX = d3.axisBottom(xScale)
+        container.append("g")
+            .call(axisX)
+            .style("transform", 
+                "translate(0px"+","+bodyHeight+"px)"
+            )
+            .selectAll("text")  
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+        let axisY = d3.axisLeft(yScale)
+        container.append("g")
+            .call(axisY)
+
+    }
+    function drawCircles_22(chartData, scales, config){
+        let { data, countries, purpose } = chartData; 
+        let { bodyWidth, bodyHeight, container } = config;
+        let { xScale, yScale, rScale, cScale } = scales;
+        
+    
+ //        m = [ {Country: "Brazil", Year: "Brazil"},
+ // {Country: "Brazil", Year: "United States"},
+ // {Country: "Brazil", Year: "India"},
+ // {Country: "Brazil", Year: "Chile"}]
+
+
+        container.selectAll()
+                .data(p1, function(d) {return d.Year+':'+d.Country;})
+                .enter()
+                .append("rect")
+                .attr("x", function(d) { return xScale(d.Year) })
+                .attr("y", function(d) { return yScale(d.Country) })
+                .attr("width", 20 )
+                .attr("height", 14 )
+                .style("fill", "#253494");
+
+
+       // function filler(purpose) {
+       //  if (purpose == "Air transport") {
+       //      return "blue"
+       //  }
+       //  else if (purpose == "Industrial development") {
+       //      return "grey"
+       //  }
+
+       // }
+
+       //  container.selectAll()
+       //          .data(p2, function(d) {return d.Year+':'+d.Country;})
+       //          .enter()
+       //          .append("rect")
+       //          .attr("x", function(d) { return xScale(d.Year) })
+       //          .attr("y", function(d) { return yScale(d.Country) })
+       //          .attr("width", 20 )
+       //          .attr("height", 14 )
+       //          .style("fill", function (d){ return filler(d.coalesced_purpose_name) });
+
+    }
+/////////////////////////////////////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////23//////////////////////////////////////////////////
+
+function groupByPurpose_23(data) {
+
+        p1=[]
+        m3 = p1
+
+        for (var i = data.length - 1; i >= 0; i--) {
+          if (data[i]["coalesced_purpose_name"] == "Power generation/non-renewable sources" ) {
+              p1.push({
+                    "Country": data[i]["donor"],
+                    "Year": data[i]["recipient"],
+                    "coalesced_purpose_name": data[i]["coalesced_purpose_name"]
+                })
+              }
+      
+        }
+
+
+
+
+
+        // console.log("p1", p1)
+        // console.log("p2", p2)
+
+        let purpose = {};
+
+        let result = data.reduce((result, d) => {
+            let recipientData = result[d.donor] || {
+                "donor": d.donor
+            }
+            let receiver = d.recipient;
+            let currPurpose = purpose[receiver] || {
+                "recipient":receiver,
+
+                "Count":0
+            }
+ 
+            currPurpose.Count += 1;
+            purpose[receiver] = currPurpose;
+            let prevAmount = Number(recipientData[receiver] || 0) 
+            recipientData[receiver] = prevAmount + Number(d.commitment_amount_usd_constant);
+            result[d.donor] = recipientData;
+            return result;
+        }, {})
+
+        let purposeArr = Object.keys(purpose).map(key => purpose[key])
+ 
+        purposeArr = purposeArr.sort((a,b) => {
+            return d3.ascending(a.recipient,b.recipient);
+        })
+        let updated = [];
+        let countries = [];
+       
+        Object.keys(result).forEach(key => {
+            var donor = result[key];
+            countries.push(donor.donor);
+            purposeArr.forEach(p => {
+                updated.push({
+                    "donor":donor.donor,
+                    "recipient": p.recipient,
+                    "Amount": Number(donor[p.recipient]) || 0
+                })
+            })
+        });
+
+        console.log("data", updated)
+
+        return {data: updated, countries: countries, purpose: purposeArr}
+    }
+
+   
+
+    function getChartConfig_23() {
+        let width = 1200;
+        let height = 1000;
+        let margin = {
+            top: 10,
+            bottom: 100,
+            left: 105,
+            right: 10
+        }
+        let bodyHeight = height - margin.top - margin.bottom;
+        let bodyWidth = width - margin.left - margin.right;
+        let container = d3.select("#body23")
+                        .append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+        return { width, height, margin, bodyHeight, bodyWidth, container };
+    }
+
+    function getChartScales_23(chartData, config) {
+        let { bodyWidth, bodyHeight } = config;
+        let { data, countries, purpose } = chartData;
+        let maximumReceived = d3.max(data, (d) => {
+            return d.Amount;
+        })
+       
+        countries = countries.sort((a,b) => {
+            return d3.descending(a,b);
+        })
+
+        let yScale= d3.scalePoint()
+            .range([0,bodyHeight])
+            .domain(countries)
+            .padding(4)
+            
+
+        let xScale = d3.scalePoint() 
+            .range([0, bodyWidth])
+            .domain(purpose.map(d => d.recipient))
+            .padding(4)
+
+    let rScale = d3.scaleLinear()
+                .domain([0,maximumReceived])
+                .range([3,50])
+        
+        let cScale = d3.scaleOrdinal()
+            .domain([0,maximumReceived])
+                .range([3,19])
+
+        return { xScale, yScale, rScale, cScale }
+    }
+
+    function drawAxesAidsChart_23(chartData, scales, config){
+        let {xScale, yScale } = scales
+        let {container, margin, height, bodyHeight} = config;
+        let { data, countries, purpose } = chartData;
+        let axisX = d3.axisBottom(xScale)
+        container.append("g")
+            .call(axisX)
+            .style("transform", 
+                "translate(0px"+","+bodyHeight+"px)"
+            )
+            .selectAll("text")  
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+        let axisY = d3.axisLeft(yScale)
+        container.append("g")
+            .call(axisY)
+
+    }
+    function drawCircles_23(chartData, scales, config){
+        let { data, countries, purpose } = chartData; 
+        let { bodyWidth, bodyHeight, container } = config;
+        let { xScale, yScale, rScale, cScale } = scales;
+        
+    
+ //        m = [ {Country: "Brazil", Year: "Brazil"},
+ // {Country: "Brazil", Year: "United States"},
+ // {Country: "Brazil", Year: "India"},
+ // {Country: "Brazil", Year: "Chile"}]
+
+
+        container.selectAll()
+                .data(p1, function(d) {return d.Year+':'+d.Country;})
+                .enter()
+                .append("rect")
+                .attr("x", function(d) { return xScale(d.Year) })
+                .attr("y", function(d) { return yScale(d.Country) })
+                .attr("width", 20 )
+                .attr("height", 14 )
+                .style("fill", "#253494");
+
+
+       // function filler(purpose) {
+       //  if (purpose == "Air transport") {
+       //      return "blue"
+       //  }
+       //  else if (purpose == "Industrial development") {
+       //      return "grey"
+       //  }
+
+       // }
+
+       //  container.selectAll()
+       //          .data(p2, function(d) {return d.Year+':'+d.Country;})
+       //          .enter()
+       //          .append("rect")
+       //          .attr("x", function(d) { return xScale(d.Year) })
+       //          .attr("y", function(d) { return yScale(d.Country) })
+       //          .attr("width", 20 )
+       //          .attr("height", 14 )
+       //          .style("fill", function (d){ return filler(d.coalesced_purpose_name) });
+
+    }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+////////////////////////////////////24////////////////////////////////////////////////////
+
+function groupByPurpose_24(data) {
+
+        p1=[]
+        m4 = p1
+
+        for (var i = data.length - 1; i >= 0; i--) {
+          if (data[i]["coalesced_purpose_name"] == "Rail transport" ) {
+              p1.push({
+                    "Country": data[i]["donor"],
+                    "Year": data[i]["recipient"],
+                    "coalesced_purpose_name": data[i]["coalesced_purpose_name"]
+                })
+              }
+      
+        }
+
+
+
+
+
+        // console.log("p1", p1)
+        // console.log("p2", p2)
+
+        let purpose = {};
+
+        let result = data.reduce((result, d) => {
+            let recipientData = result[d.donor] || {
+                "donor": d.donor
+            }
+            let receiver = d.recipient;
+            let currPurpose = purpose[receiver] || {
+                "recipient":receiver,
+
+                "Count":0
+            }
+ 
+            currPurpose.Count += 1;
+            purpose[receiver] = currPurpose;
+            let prevAmount = Number(recipientData[receiver] || 0) 
+            recipientData[receiver] = prevAmount + Number(d.commitment_amount_usd_constant);
+            result[d.donor] = recipientData;
+            return result;
+        }, {})
+
+        let purposeArr = Object.keys(purpose).map(key => purpose[key])
+ 
+        purposeArr = purposeArr.sort((a,b) => {
+            return d3.ascending(a.recipient,b.recipient);
+        })
+        let updated = [];
+        let countries = [];
+       
+        Object.keys(result).forEach(key => {
+            var donor = result[key];
+            countries.push(donor.donor);
+            purposeArr.forEach(p => {
+                updated.push({
+                    "donor":donor.donor,
+                    "recipient": p.recipient,
+                    "Amount": Number(donor[p.recipient]) || 0
+                })
+            })
+        });
+
+        console.log("data", updated)
+
+        return {data: updated, countries: countries, purpose: purposeArr}
+    }
+
+   
+
+    function getChartConfig_24() {
+        let width = 1200;
+        let height = 1000;
+        let margin = {
+            top: 10,
+            bottom: 100,
+            left: 105,
+            right: 10
+        }
+        let bodyHeight = height - margin.top - margin.bottom;
+        let bodyWidth = width - margin.left - margin.right;
+        let container = d3.select("#body24")
+                        .append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+        return { width, height, margin, bodyHeight, bodyWidth, container };
+    }
+
+    function getChartScales_24(chartData, config) {
+        let { bodyWidth, bodyHeight } = config;
+        let { data, countries, purpose } = chartData;
+        let maximumReceived = d3.max(data, (d) => {
+            return d.Amount;
+        })
+       
+        countries = countries.sort((a,b) => {
+            return d3.descending(a,b);
+        })
+
+        let yScale= d3.scalePoint()
+            .range([0,bodyHeight])
+            .domain(countries)
+            .padding(4)
+            
+
+        let xScale = d3.scalePoint() 
+            .range([0, bodyWidth])
+            .domain(purpose.map(d => d.recipient))
+            .padding(4)
+
+    let rScale = d3.scaleLinear()
+                .domain([0,maximumReceived])
+                .range([3,50])
+        
+        let cScale = d3.scaleOrdinal()
+            .domain([0,maximumReceived])
+                .range([3,19])
+
+        return { xScale, yScale, rScale, cScale }
+    }
+
+    function drawAxesAidsChart_24(chartData, scales, config){
+        let {xScale, yScale } = scales
+        let {container, margin, height, bodyHeight} = config;
+        let { data, countries, purpose } = chartData;
+        let axisX = d3.axisBottom(xScale)
+        container.append("g")
+            .call(axisX)
+            .style("transform", 
+                "translate(0px"+","+bodyHeight+"px)"
+            )
+            .selectAll("text")  
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+        let axisY = d3.axisLeft(yScale)
+        container.append("g")
+            .call(axisY)
+
+    }
+    function drawCircles_24(chartData, scales, config){
+        let { data, countries, purpose } = chartData; 
+        let { bodyWidth, bodyHeight, container } = config;
+        let { xScale, yScale, rScale, cScale } = scales;
+        
+    
+ //        m = [ {Country: "Brazil", Year: "Brazil"},
+ // {Country: "Brazil", Year: "United States"},
+ // {Country: "Brazil", Year: "India"},
+ // {Country: "Brazil", Year: "Chile"}]
+
+
+        container.selectAll()
+                .data(p1, function(d) {return d.Year+':'+d.Country;})
+                .enter()
+                .append("rect")
+                .attr("x", function(d) { return xScale(d.Year) })
+                .attr("y", function(d) { return yScale(d.Country) })
+                .attr("width", 20 )
+                .attr("height", 14 )
+                .style("fill", "#253494");
+
+
+       // function filler(purpose) {
+       //  if (purpose == "Air transport") {
+       //      return "blue"
+       //  }
+       //  else if (purpose == "Industrial development") {
+       //      return "grey"
+       //  }
+
+       // }
+
+       //  container.selectAll()
+       //          .data(p2, function(d) {return d.Year+':'+d.Country;})
+       //          .enter()
+       //          .append("rect")
+       //          .attr("x", function(d) { return xScale(d.Year) })
+       //          .attr("y", function(d) { return yScale(d.Country) })
+       //          .attr("width", 20 )
+       //          .attr("height", 14 )
+       //          .style("fill", function (d){ return filler(d.coalesced_purpose_name) });
+
+    }
+
+    //////////////////////////////////////////////////////////////
+
+    /////////////////////////////////////25/////////////////////////////////////////////////////
+    function groupByPurpose_25(data) {
+
+        p1=[]
+        m5 = p1
+
+        for (var i = data.length - 1; i >= 0; i--) {
+          if (data[i]["coalesced_purpose_name"] == "Rescheduling and refinancing" ) {
+              p1.push({
+                    "Country": data[i]["donor"],
+                    "Year": data[i]["recipient"],
+                    "coalesced_purpose_name": data[i]["coalesced_purpose_name"]
+                })
+              }
+      
+        }
+
+
+
+
+
+        // console.log("p1", p1)
+        // console.log("p2", p2)
+
+        let purpose = {};
+
+        let result = data.reduce((result, d) => {
+            let recipientData = result[d.donor] || {
+                "donor": d.donor
+            }
+            let receiver = d.recipient;
+            let currPurpose = purpose[receiver] || {
+                "recipient":receiver,
+
+                "Count":0
+            }
+ 
+            currPurpose.Count += 1;
+            purpose[receiver] = currPurpose;
+            let prevAmount = Number(recipientData[receiver] || 0) 
+            recipientData[receiver] = prevAmount + Number(d.commitment_amount_usd_constant);
+            result[d.donor] = recipientData;
+            return result;
+        }, {})
+
+        let purposeArr = Object.keys(purpose).map(key => purpose[key])
+ 
+        purposeArr = purposeArr.sort((a,b) => {
+            return d3.ascending(a.recipient,b.recipient);
+        })
+        let updated = [];
+        let countries = [];
+       
+        Object.keys(result).forEach(key => {
+            var donor = result[key];
+            countries.push(donor.donor);
+            purposeArr.forEach(p => {
+                updated.push({
+                    "donor":donor.donor,
+                    "recipient": p.recipient,
+                    "Amount": Number(donor[p.recipient]) || 0
+                })
+            })
+        });
+
+        console.log("data", updated)
+
+        return {data: updated, countries: countries, purpose: purposeArr}
+    }
+
+   
+
+    function getChartConfig_25() {
+        let width = 1200;
+        let height = 1000;
+        let margin = {
+            top: 10,
+            bottom: 100,
+            left: 105,
+            right: 10
+        }
+        let bodyHeight = height - margin.top - margin.bottom;
+        let bodyWidth = width - margin.left - margin.right;
+        let container = d3.select("#body25")
+                        .append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+        return { width, height, margin, bodyHeight, bodyWidth, container };
+    }
+
+    function getChartScales_25(chartData, config) {
+        let { bodyWidth, bodyHeight } = config;
+        let { data, countries, purpose } = chartData;
+        let maximumReceived = d3.max(data, (d) => {
+            return d.Amount;
+        })
+       
+        countries = countries.sort((a,b) => {
+            return d3.descending(a,b);
+        })
+
+        let yScale= d3.scalePoint()
+            .range([0,bodyHeight])
+            .domain(countries)
+            .padding(4)
+            
+
+        let xScale = d3.scalePoint() 
+            .range([0, bodyWidth])
+            .domain(purpose.map(d => d.recipient))
+            .padding(4)
+
+    let rScale = d3.scaleLinear()
+                .domain([0,maximumReceived])
+                .range([3,50])
+        
+        let cScale = d3.scaleOrdinal()
+            .domain([0,maximumReceived])
+                .range([3,19])
+
+        return { xScale, yScale, rScale, cScale }
+    }
+
+    function drawAxesAidsChart_25(chartData, scales, config){
+        let {xScale, yScale } = scales
+        let {container, margin, height, bodyHeight} = config;
+        let { data, countries, purpose } = chartData;
+        let axisX = d3.axisBottom(xScale)
+        container.append("g")
+            .call(axisX)
+            .style("transform", 
+                "translate(0px"+","+bodyHeight+"px)"
+            )
+            .selectAll("text")  
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+        let axisY = d3.axisLeft(yScale)
+        container.append("g")
+            .call(axisY)
+
+    }
+    function drawCircles_25(chartData, scales, config){
+        let { data, countries, purpose } = chartData; 
+        let { bodyWidth, bodyHeight, container } = config;
+        let { xScale, yScale, rScale, cScale } = scales;
+        
+    
+ //        m = [ {Country: "Brazil", Year: "Brazil"},
+ // {Country: "Brazil", Year: "United States"},
+ // {Country: "Brazil", Year: "India"},
+ // {Country: "Brazil", Year: "Chile"}]
+
+
+        container.selectAll()
+                .data(p1, function(d) {return d.Year+':'+d.Country;})
+                .enter()
+                .append("rect")
+                .attr("x", function(d) { return xScale(d.Year) })
+                .attr("y", function(d) { return yScale(d.Country) })
+                .attr("width", 20 )
+                .attr("height", 14 )
+                .style("fill", "#253494");
+
+
+	console.log("n1", m1)
+	console.log("n2", m2)
+	console.log("n3", m3)
+	console.log("n4", m4)
+	console.log("n5", m5)
+// console.log("updated matrix", matrix)
+for (var i = 0; i <= matrix.length - 1; i++) {
+	donor_m = matrix[i]["donor"]
+	receiver_m = matrix[i]["recipient"]
+	counter = 0
+	counter_m1 = 0
+	counter_m2 = 0
+	counter_m3 = 0
+	counter_m4 = 0
+	counter_m5 = 0
+
+
+	// console.log("donor_m", donor_m)
+	// console.log("receiver_m", receiver_m)
+
+	// console.log("111")
+	for (var j = 0; j <= m1.length - 1; j++) {
+		// console.log("asd", m1[j]["Country"])
+	if (donor_m == m1[j]["Country"]){
+		// console.log("121")
+		if (m1[j]["Year"] == receiver_m){
+			// console.log("111")
+			counter_m1 = counter_m1 + 1
+			
+		}
+	 }
+	} 
+
+
+	for (var j = 0; j <= m2.length - 1; j++) {
+	if (donor_m == m2[j]["Country"]){
+		if (receiver_m == m2[j]["Year"]){
+			counter_m2 = counter_m2 + 1
+			
+		}
+	}}
+
+
+	for (var j = 0; j <= m3.length - 1; j++) {
+	if (donor_m == m3[j]["Country"]){
+		if (receiver_m == m3[j]["Year"]){
+			counter_m3 = counter_m3 + 1
+			
+		}
+	}}
+
+	for (var j = 0; j <= m4.length - 1; j++) {
+	if (donor_m == m4[j]["Country"]){
+		if (receiver_m == m4[j]["Year"]){
+			counter_m4 = counter_m4 + 1
+			
+		}
+	}
+	}
+
+	for (var j = 0; j <= m5.length - 1; j++) {
+	if (donor_m == m5[j]["Country"]){
+		if (receiver_m == m5[j]["Year"]){
+			counter_m5 = counter_m5 + 1
+			
+		}
+	}}
+
+	array = []
+	// console.log("counter_m1", counter_m1)
+	// console.log("counter_m1", counter_m2)
+	// console.log("counter_m1", counter_m3)
+	// console.log("counter_m1", counter_m4)
+	// console.log("counter_m1", counter_m5)
+
+	array.push(counter_m1, counter_m2, counter_m3, counter_m4, counter_m5)
+	// console.log("d3.max(array)",d3.max(array))
+
+	// let maximumReceived = d3.max(data, (d) => {
+ //            return d.Amount;
+ //        })
+ 	if (d3.max(array) == 0){
+ 		matrix[i]["count"] = 0
+ 	}
+
+ 	else {
+
+
+	if (counter_m1 == d3.max(array)){
+			matrix[i]["count"] = 1
+		}
+
+	else if (counter_m2 == d3.max(array)){
+			matrix[i]["count"] = 2
+		}
+
+	else if (counter_m3 == d3.max(array)){
+			matrix[i]["count"] = 3
+		}
+
+	else if (counter_m4 == d3.max(array)){
+			matrix[i]["count"] = 4
+		}
+
+	else if (counter_m5 == d3.max(array)){
+			matrix[i]["count"] = 5
+		}
+
+	 }
+	
+}
+console.log("matrixx", matrix)
+
+
+       // function filler(purpose) {
+       //  if (purpose == "Air transport") {
+       //      return "blue"
+       //  }
+       //  else if (purpose == "Industrial development") {
+       //      return "grey"
+       //  }
+
+       // }
+
+       //  container.selectAll()
+       //          .data(p2, function(d) {return d.Year+':'+d.Country;})
+       //          .enter()
+       //          .append("rect")
+       //          .attr("x", function(d) { return xScale(d.Year) })
+       //          .attr("y", function(d) { return yScale(d.Country) })
+       //          .attr("width", 20 )
+       //          .attr("height", 14 )
+       //          .style("fill", function (d){ return filler(d.coalesced_purpose_name) });
+
+    }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+////////////////////////////////////////////////////////VISUALIZATION 2//////////////////////////////////////////////////////////
+
+function groupByPurpose_new(data) {
+     
+        let purpose = {};
+
+        let result = data.reduce((result, d) => {
+            let recipientData = result[d.donor] || {
+                "donor": d.donor
+            }
+            let receiver = d.recipient;
+            let currPurpose = purpose[receiver] || {
+                "recipient":receiver,
+
+                "Count":0
+            }
+ 
+            currPurpose.Count += 1;
+            purpose[receiver] = currPurpose;
+            let prevAmount = Number(recipientData[receiver] || 0) 
+            recipientData[receiver] = prevAmount + Number(d.commitment_amount_usd_constant); 
+            result[d.donor] = recipientData;
+            return result;
+        }, {})
+
+        let purposeArr = Object.keys(purpose).map(key => purpose[key])
+ 
+        purposeArr = purposeArr.sort((a,b) => {
+            return d3.ascending(a.recipient,b.recipient);
+        })
+        let updated = [];
+        let countries = [];
+       
+        Object.keys(result).forEach(key => {
+            var donor = result[key];
+            countries.push(donor.donor);
+
+
+            purposeArr.forEach(p => {
+                updated.push({
+                    "donor":donor.donor,
+                    "recipient": p.recipient,
+                    "Amount": Number(donor[p.recipient]) || 0
+                })
+            })
+
+
+
+        });
+
+
+
+
+        return {data: updated, countries: countries, purpose: purposeArr}
+    }
+
+   
+
+    function getChartConfig_new() {
+    	let width = 1200;
+        let height = 1000;
+        let margin = {
+            top: 10,
+            bottom: 100,
+            left: 105,
+            right: 10
+        }
+        let bodyHeight = height - margin.top - margin.bottom;
+        let bodyWidth = width - margin.left - margin.right;
+        let container = d3.select("#body31")
+                        .append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+        return { width, height, margin, bodyHeight, bodyWidth, container };
+
+        // let width = 1200;
+        // let height = 1000;
+        // let margin = {
+        //     top: 10,
+        //     bottom: 100,
+        //     left: 105,
+        //     right: 10
+        // }
+        // let bodyHeight = height - margin.top - margin.bottom;
+        // let bodyWidth = width - margin.left - margin.right;
+        // let container = d3.select("#body31")
+        //                 .append("svg")
+        //                 .attr("width", width)
+        //                 .attr("height", height)
+        //                 .attr("id", "Chart")
+        //                 .append("g")
+        //                 .attr("transform", "translate("+[margin.left,margin.top]+")")
+        // return { width, height, margin, bodyHeight, bodyWidth, container };
+    }
+
+    function getChartScales_new(chartData, config) {
+    	let { bodyWidth, bodyHeight } = config;
+        let { data, countries, purpose } = chartData;
+        let maximumReceived = d3.max(data, (d) => {
+            return d.Amount;
+        })
+       
+        countries = countries.sort((a,b) => {
+            return d3.descending(a,b);
+        })
+
+        let yScale= d3.scalePoint()
+            .range([0,bodyHeight])
+            .domain(countries)
+            .padding(4)
+            
+
+        let xScale = d3.scalePoint() 
+            .range([0, bodyWidth])
+            .domain(purpose.map(d => d.recipient))
+            .padding(4)
+
+    let rScale = d3.scaleLinear()
+                .domain([0,maximumReceived])
+                .range([3,50])
+        
+        let cScale = d3.scaleOrdinal()
+            .domain([0,maximumReceived])
+                .range([3,19])
+
+        return { xScale, yScale, rScale, cScale }
+
+    //     let { bodyWidth, bodyHeight } = config;
+    //     let { data, countries, purpose } = chartData;
+    //     let maximumReceived = d3.max(data, (d) => {
+    //         return d.Amount;
+    //     })
+       
+    //     countries = countries.sort((a,b) => {
+    //         return d3.descending(a,b);
+    //     })
+
+    //     let yScale= d3.scalePoint()
+    //         .range([0,bodyHeight])
+    //         .domain(countries)
+    //         .padding(4)
+            
+
+    //     let xScale = d3.scalePoint() 
+    //         .range([0, bodyWidth])
+    //         .domain(purpose.map(d => d.recipient))
+    //         .padding(4)
+
+    // let rScale = d3.scaleLinear()
+    //             .domain([0,maximumReceived])
+    //             .range([0.1,50.5])
+        
+    //     let cScale = d3.scaleOrdinal()
+    //         .domain([0,maximumReceived])
+    //             .range([3,19])
+
+    //     return { xScale, yScale, rScale, cScale }
+    }
+
+    function drawAxesAidsChart_new(chartData, scales, config){
+    	        let {xScale, yScale } = scales
+        let {container, margin, height, bodyHeight} = config;
+        let { data, countries, purpose } = chartData;
+        let axisX = d3.axisBottom(xScale)
+        container.append("g")
+            .call(axisX)
+            .style("transform", 
+                "translate(0px"+","+bodyHeight+"px)"
+            )
+            .selectAll("text")  
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+        let axisY = d3.axisLeft(yScale)
+        container.append("g")
+            .call(axisY)
+
+         countries.forEach(donor => {
+            container
+                .append("line")
+                    .style("stroke", "#777")
+                    .style("stroke-dasharray", ("3, 3"))
+                    .attr("y1", bodyHeight)
+                    .attr("y2", 0)
+                    .attr("x1", xScale(donor))
+                    .attr("x2", xScale(donor))
+        })
+
+        // let {xScale, yScale } = scales
+        // let {container, margin, height, bodyHeight} = config;
+        // let { data, countries, purpose } = chartData;
+        // let axisX = d3.axisBottom(xScale)
+        // container.append("g")
+        //     .call(axisX)
+        //     .style("transform", 
+        //         "translate(0px"+","+bodyHeight+"px)"
+        //     )
+        //     .selectAll("text")  
+        //         .style("text-anchor", "end")
+        //         .attr("dx", "-.8em")
+        //         .attr("dy", ".15em")
+        //         .attr("transform", "rotate(-45)");
+
+        // let axisY = d3.axisLeft(yScale)
+        // container.append("g")
+        //     .call(axisY)
+
+    }
+    function drawCircles_new(chartData, scales, config){
+        let { data, countries, purpose } = chartData; 
+        let { bodyWidth, bodyHeight, container } = config;
+        let { xScale, yScale, rScale, cScale } = scales;
+        // var circle = container.selectAll("circle")
+        //     .data(data);
+        console.log("qwert", matrix)
+        container.selectAll()
+                .data(matrix, function(d) {return d.recipient+':'+d.donor;})
+                .enter()
+                .append("rect")
+                .attr("x", function(d) { return xScale(d.recipient) })
+                .attr("y", function(d) { return yScale(d.donor) })
+                .attr("width", 20 )
+                .attr("height", 14 )
+                .style("fill", function(d) {
+                	if (d.count == "1") {
+                		return "#ff7f00"
+                	}
+                	else if (d.count == "2") {
+                		return "#984ea3"
+                	}
+                	else if (d.count == "3") {
+                		return "#4daf4a"
+                	}
+                	else if (d.count == "4") {
+                		return "#377eb8"
+                	}
+                	else if (d.count == "5") {
+                		return "#e41a1c"
+                	}
+                	else return "white"
+                });  
+
+	   //  var sequentialScale = d3.scaleOrdinal()
+		  // .domain(["1 Purpose", "2 Purposes", "3 Purposes", "4 Purposes", "5 Purposes"])
+		  // .range(["#ff7f00", "#984ea3", "#4daf4a", "#377eb8", "#e41a1c"]);
+
+
+        // let margin = {
+        //     top: 10,
+        //     bottom: 100,
+        //     left: 105,
+        //     right: 10
+        // }
+
+		  /*let container1 = d3.select("#legend3")
+                        .append("svg")
+                        .attr("width", 400)
+                        .attr("height", 200)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+
+		container1.append("g")
+		  .attr("class", "legendSequential")
+		  .attr("transform", "translate(0,0)");
+
+		var legendSequential = d3.legendColor()
+		    .shapeWidth(30)
+		    .cells(5)
+		    .orient("Vertical")
+		    .scale(sequentialScale) 
+
+		container1.select(".legendSequential")
+		  .call(legendSequential);*/
+		    }
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+function legend()
+{
+var linearSize = d3.scaleLinear()
+        	.domain([0, 48000])
+        	.range([10, 30]);
+
+		let margin = {
+            top: 10,
+            bottom: 100,
+            left: 105,
+            right: 10
+        }
+
+		  let container1 = d3.select("#legend1")
+                        .append("svg")
+                        .attr("width", 400)
+                        .attr("height", 400)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+                    
+
+		container1.append("g")
+		  .attr("class", "legendSize")
+		  .attr("transform", "translate(20, 40)");
+
+		var legendSize = d3.legendSize()
+		  .scale(linearSize)
+		  .shape('circle')
+		  .shapePadding(25)
+		  .labelOffset(20)
+		  .orient('Vertical');
+
+		  // .attr('fill', '#4e79a7');
+
+		container1.select(".legendSize")
+		  .call(legendSize);
+		  // .attr('fill', '#4e79a7');
+
+
+	    var sequentialScale = d3.scaleOrdinal()
+		  .domain(["Air transport", "Industrial development", "Power generation/non-renewable sources", "Rail transport", "Rescheduling and refinancing"])
+		  .range(["#ff7f00", "#984ea3", "#4daf4a", "#377eb8", "#e41a1c"]);
+
+		  let container2 = d3.select("#legend3")
+                        .append("svg")
+                        .attr("width", 600)
+                        .attr("height", 200)
+                        .attr("id", "Chart")
+                        .append("g")
+                        .attr("transform", "translate("+[margin.left,margin.top]+")")
+
+		container2.append("g")
+		  .attr("class", "legendSequential")
+		  .attr("transform", "translate(0,0)");
+
+		var legendSequential = d3.legendColor()
+		    .shapeWidth(30)
+		    .cells(5)
+		    .orient("Vertical")
+		    .scale(sequentialScale) 
+
+		container2.select(".legendSequential")
+		  .call(legendSequential);
+}
+
+
+function showData() {
+
+        let aid_data = store.aid_data;
+        
+        let data = groupByPurpose(aid_data);
+        let config = getChartConfig();
+        let scales = getChartScales(data, config);
+        drawAxesAidsChart(data, scales, config);
+        drawCircles(data, scales, config);
+
+                let data_21 = groupByPurpose_21(aid_data);
+        let config_21 = getChartConfig_21();
+        let scales_21 = getChartScales_21(data_21, config_21);
+        drawAxesAidsChart_21(data_21, scales_21, config_21);
+        drawCircles_21(data_21, scales_21, config_21);
+
+                let data_22 = groupByPurpose_22(aid_data);
+        let config_22 = getChartConfig_22();
+        let scales_22 = getChartScales_22(data_22, config_22);
+        drawAxesAidsChart_22(data_22, scales_22, config_22);
+        drawCircles_22(data_22, scales_22, config_22);
+
+                let data_23 = groupByPurpose_23(aid_data);
+        let config_23 = getChartConfig_23();
+        let scales_23 = getChartScales_23(data_23, config_23);
+        drawAxesAidsChart_23(data_23, scales_23, config_23);
+        drawCircles_23(data_23, scales_23, config_23);
+
+                let data_24 = groupByPurpose_24(aid_data);
+        let config_24 = getChartConfig_24();
+        let scales_24 = getChartScales_24(data_24, config_24);
+        drawAxesAidsChart_24(data_24, scales_24, config_24);
+        drawCircles_24(data_24, scales_24, config_24);
+
+        let data_25 = groupByPurpose_25(aid_data);
+        let config_25 = getChartConfig_25();
+        let scales_25 = getChartScales_25(data_25, config_25);
+        drawAxesAidsChart_25(data_25, scales_25, config_25);
+        drawCircles_25(data_25, scales_25, config_25);
+
+
+        let data_new = groupByPurpose_new(aid_data);
+        let config_new = getChartConfig_new();
+        let scales_new = getChartScales_new(data_new, config_new);
+        drawAxesAidsChart_new(data_new, scales_new, config_new);
+        drawCircles_new(data_new, scales_new, config_new);
+
+        legend();
+
+        // let data2 = groupByPurpose_viz2(aid_data);
+        // let config2 = getChartConfig_viz2();
+        // let scales2 = getChartScales_viz2(data2, config2);
+        // drawAxesAidsChart_viz2(data2, scales2, config2);
+        // drawCircles_viz2(data2, scales2, config2);
+
+}
+
+
+loadData().then(showData);
+
+</script>
+
+
+</html>
