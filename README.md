@@ -1,1 +1,1 @@
-# Information-Visualization
+# Data-Visualization
